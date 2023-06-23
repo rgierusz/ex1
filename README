@@ -8,13 +8,11 @@ Let me give all of you some details about what I've been doing during all that t
   - deployment.yaml - to deploy to minicube/kubernetes - this creates pod, I defined liveness and readiness there
   - service.yaml - pods (see above) do not provide constant access points, so I decided to create service over them, to have it exposed with constant access point - this was needed for Prometheus
 - kubernetes Prometheus instance was configured to scrape metrics, so it's connected to the app:
-```
          670     scrape_configs:
          671       - job_name: alluvial-ex1
          672         static_configs:
          673           - targets:
          674             - alluvial-ex1-service:8081
-```
 - the project has three modules:
   - main - to start the app
   - metric - to prepare handy metrics
