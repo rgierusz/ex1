@@ -1,0 +1,26 @@
+name: APIIntegrationTest
+
+vars:
+  url: "http://localhost:8081/eth/balance"
+
+testcases:
+  - name: GET balance
+    steps:
+      - type: http
+        method: GET
+        name: "correct case"
+        url: {{.url}}/0xfe3b557e8fb62b89f4916b721be55ceb828dbd73
+        timeout: 3
+        assertions:
+          - result.statuscode ShouldEqual 200
+          - result.timeseconds ShouldBeLessThan 3
+          - result.bodyjson ShouldContainKey balance
+
+      - type: http
+        method: GET
+        name: "incorrect address format"
+        url: {{.url}}/invalid
+        timeout: 3
+        assertions:
+          - result.statuscode ShouldEqual 400
+          - result.timeseconds ShouldBeLessThan 3

@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alluvial-ex1
+  labels:
+    app: alluvial-ex1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alluvial-ex1
+  template:
+    metadata:
+      labels:
+        app: alluvial-ex1
+    spec:
+      containers:
+        - name: alluvial-ex1
+          image: rgierusz:ex1
+          ports:
+            - containerPort: 8081
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 3
+            periodSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 6
+            periodSeconds: 6
