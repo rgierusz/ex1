@@ -18,10 +18,13 @@ const (
 	serverAddr = ":8081"
 
 	pathVariableGetBalance = "address"
+	pathSegmentWei         = "wei"
 
 	pathMetric      = "/metrics"
 	pathHealthCheck = "/healthz"
-	pathGetBalance  = "/eth/balance/{" + pathVariableGetBalance + "}"
+
+	pathGetBalance          = "/eth/balance/{" + pathVariableGetBalance + "}"
+	pathGetBalanceWeiSuffix = "/{" + pathSegmentWei + ":(?i)" + pathSegmentWei + "}" //optional suffix indicating wei response format
 )
 
 var gatewayURLs = [3]string{
@@ -31,7 +34,8 @@ var gatewayURLs = [3]string{
 }
 
 type BalanceResponse struct {
-	Balance string `json:"balance"`
+	Balance    string `json:"balance,omitempty"`
+	WeiBalance string `json:"weiBalance,omitempty"`
 }
 
 // client is cached for performance reasons
@@ -42,13 +46,18 @@ func InitServer() {
 
 	router.HandleFunc(pathMetric, promhttp.Handler().ServeHTTP)
 	router.HandleFunc(pathHealthCheck, metric.HandlerMetricsWrapper(metric.HealthCheckStartedCounter, metric.HealthCheckCompletedCounter, livenessHandler))
-	router.HandleFunc(pathGetBalance, metric.HandlerMetricsWrapper(metric.GetBalanceStartedCounter, metric.GetBalanceCompletedCounter, balanceHandler))
+
+	balanceHandle := metric.HandlerMetricsWrapper(metric.GetBalanceStartedCounter, metric.GetBalanceCompletedCounter, balanceHandler)
+	router.HandleFunc(pathGetBalance, balanceHandle)
+	router.PathPrefix(pathGetBalance).Path(pathGetBalanceWeiSuffix).HandlerFunc(balanceHandle)
 
 	log.Fatal(http.ListenAndServe(serverAddr, router))
 }
 
 func balanceHandler(w http.ResponseWriter, r *http.Request) {
-	hexAddress := mux.Vars(r)[pathVariableGetBalance]
+	vars := mux.Vars(r)
+
+	hexAddress := vars[pathVariableGetBalance]
 	if !common.IsHexAddress(hexAddress) {
 		http.Error(w, "Incorrect ETH address", http.StatusBadRequest)
 		return
@@ -57,9 +66,15 @@ func balanceHandler(w http.ResponseWriter, r *http.Request) {
 	if balance, e, c := getBalance(r, common.HexToAddress(hexAddress)); e != nil {
 		http.Error(w, e.Error(), c)
 	} else {
-		balanceEther := new(big.Float).Quo(new(big.Float).SetInt(balance), big.NewFloat(params.Ether))
+		var resp BalanceResponse
 
-		resp := BalanceResponse{Balance: fmt.Sprintf("%.18f", balanceEther)}
+		if _, weiRequest := vars[pathSegmentWei]; weiRequest {
+			resp = BalanceResponse{WeiBalance: balance.String()}
+		} else {
+			balanceEther := new(big.Float).Quo(new(big.Float).SetInt(balance), big.NewFloat(params.Ether))
+			resp = BalanceResponse{Balance: fmt.Sprintf("%.18f", balanceEther)}
+		}
+
 		if jsonResp, jsonErr := json.Marshal(resp); jsonErr != nil {
 			http.Error(w, jsonErr.Error(), http.StatusInternalServerError)
 		} else {

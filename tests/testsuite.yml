@@ -2,6 +2,7 @@ name: APIIntegrationTest
 
 vars:
   url: "http://localhost:8081/eth/balance"
+  address: "0xfe3b557e8fb62b89f4916b721be55ceb828dbd73"
 
 testcases:
   - name: GET balance
@@ -9,7 +10,7 @@ testcases:
       - type: http
         method: GET
         name: "correct case"
-        url: {{.url}}/0xfe3b557e8fb62b89f4916b721be55ceb828dbd73
+        url: {{.url}}/{{.address}}
         timeout: 3
         assertions:
           - result.statuscode ShouldEqual 200
@@ -24,3 +25,18 @@ testcases:
         assertions:
           - result.statuscode ShouldEqual 400
           - result.timeseconds ShouldBeLessThan 3
+
+      - type: http
+        method: GET 
+        name: "wei balance"
+        range:
+          - wei: wei
+          - wei: WEI
+          - wei: Wei
+        url: {{.url}}/{{.address}}/{{.value.wei}}
+        timeout: 3
+        assertions:
+          - result.statuscode ShouldEqual 200 
+          - result.timeseconds ShouldBeLessThan 3
+          - result.bodyjson ShouldContainKey weiBalance
+

@@ -21,6 +21,7 @@ Let me give all of you some details about what I've been doing during all that t
   - I decided to make it more robust, and implemented iterating over three gateway URLs (see gatewayURLs), in case some of them are not working
   - I also cache the eth client to make the communication more performative
 - in the test directory, there is a very simple, but working, integration test for venom framework
+- the /eth/balance/{address} supports optional case-insensitive /wei suffix to switch to wei result format
 
 There is more things to describe, but I'll share that during the interview.
 
