@@ -15,12 +15,11 @@ func main() {
 }
 
 func testMv() {
-	mv := multithreading.NewMovingWindow((3 * time.Second).Milliseconds(), multithreading.AverageProcessor)
+	mv := multithreading.NewMovingWindow((3 * time.Second).Milliseconds(), multithreading.AverageProcessor, multithreading.SumProcessor)
 
 	go printMwStatusEverySec(mv)
 
-	log.Println()
-
+	time.Sleep(time.Second)
 	mv.AddValue(3)
 
 	time.Sleep(time.Millisecond * 1500) // 1.5s
@@ -37,7 +36,7 @@ func printMwStatusEverySec(mv *multithreading.MovingWindow) {
 
 	for {
 		log.Printf("--- %vs ---", counter)
-		mv.CalculateAverage()
+		mv.ProcessWithProcessors()
 		counter++
 
 		time.Sleep(time.Second)

@@ -17,17 +17,17 @@ func (v valueWithTs) String() string {
 }
 
 type MovingWindow struct {
-	periodMs  int64
-	values    []valueWithTs
-	mu        sync.RWMutex
-	processor func([]valueWithTs) float64
+	periodMs   int64
+	values     []valueWithTs
+	mu         sync.RWMutex
+	processors []func([]valueWithTs) float64
 }
 
-func NewMovingWindow(periodMs int64, processor func([]valueWithTs) float64) *MovingWindow {
+func NewMovingWindow(periodMs int64, processors ...func([]valueWithTs) float64) *MovingWindow {
 	return &MovingWindow{
-		periodMs:  periodMs,
-		values:    make([]valueWithTs, 0),
-		processor: processor,
+		periodMs:   periodMs,
+		values:     make([]valueWithTs, 0),
+		processors: processors,
 	}
 }
 
@@ -35,64 +35,60 @@ func (mw *MovingWindow) AddValue(value int) {
 	mw.mu.Lock()
 	defer mw.mu.Unlock()
 
-	currentTsMs := time.Now().UnixMilli()
-
-	mw.removeOutdatedValues(currentTsMs)
+	mw.removeOutdatedValues()
 
 	mw.values = append(mw.values, valueWithTs{
 		v:    value,
-		tsMs: currentTsMs,
+		tsMs: time.Now().UnixMilli(),
 	})
 }
 
-func (mw *MovingWindow) CalculateAverage() float64 {
+func (mw *MovingWindow) ProcessWithProcessors() []float64 {
 	mw.mu.RLock()
 	defer mw.mu.RUnlock()
 
-	return mw.processor(mw.getValidValuesSlice())
+	values, _ := mw.getValidValues()
+
+	var results []float64
+	for _, processor := range mw.processors {
+		results = append(results, processor(values))
+	}
+
+	return results
 }
 
-// there is no modification of values performed here
-// can be combined with removeOutdatedValues method, but for the reason of clarity  - and performance - it's implemented separately
-func (mw *MovingWindow) getValidValuesSlice() []valueWithTs {
-	edgeTs := time.Now().UnixMilli() - mw.periodMs
-	toSkipIndex := -1
+// this function assumes that the locking is external
+// the bool part of the result indicates if the returned value is different from the internal window's value
+func (mw *MovingWindow) getValidValues() ([]valueWithTs, bool) {
+	if len(mw.values) == 0 {
+		return mw.values, false
+	}
 
+	edgeTs := time.Now().UnixMilli() - mw.periodMs
+
+	lastIndexToSkip := -1
 	for i, v := range mw.values {
-		if v.tsMs < edgeTs {
-			toSkipIndex = i
-		} else {
+		if v.tsMs >= edgeTs {
 			break
 		}
+
+		lastIndexToSkip = i
 	}
 
-	if toSkipIndex == -1 {
-		return mw.values
+	if lastIndexToSkip == -1 {
+		return mw.values, false // exactly the same slice, nothing to skip
+	} else if lastIndexToSkip == len(mw.values)-1 {
+		return mw.values[:0], true // everything was skipped, empty slice
 	}
 
-	return mw.values[toSkipIndex+1:]
+	return mw.values[lastIndexToSkip+1:], true
 }
 
-// this function assumed that the locking is external
-func (mw *MovingWindow) removeOutdatedValues(currentTsMs int64) {
-	if len(mw.values) == 0 {
-		return
+// this function assumes that the locking is external
+func (mw *MovingWindow) removeOutdatedValues() {
+	if values, changed := mw.getValidValues(); changed {
+		mw.values = values
 	}
-
-	edgeTs := currentTsMs - mw.periodMs
-
-	for i, v := range mw.values {
-		if v.tsMs >= edgeTs { // current value is not outdated, no need to continue iteration
-			if i == 0 { // current (not outdated) value is the first one, no need to remove anything
-				return
-			}
-
-			mw.values = mw.values[i:] // remove all values before the current value
-			return
-		}
-	}
-
-	mw.values = mw.values[:0] // all values are outdated and need to be removed
 }
 
 // AverageProcessor example processor to demonstrate external usage
@@ -106,11 +102,22 @@ func AverageProcessor(values []valueWithTs) float64 {
 
 	if count > 0 {
 		average := float64(sum) / float64(count)
-		log.Printf("Count %v -> %v -> average: %v", len(values), values, average)
+		log.Printf("Processor 1: count %v -> %v -> average: %v\n", len(values), values, average)
 
 		return average
 	}
 
-	log.Printf("Count %v -> %v -> average: %v", len(values), values, 0.0)
+	log.Printf("Processor 1: count %v -> %v -> average: %v", len(values), values, 0.0)
 	return 0.0
+}
+
+// SumProcessor example processor to demonstrate external usage
+func SumProcessor(values []valueWithTs) float64 {
+	var sum int
+	for _, value := range values {
+		sum += value.v
+	}
+
+	log.Printf("Processor 2: sum: %v\n", sum)
+	return float64(sum)
 }
